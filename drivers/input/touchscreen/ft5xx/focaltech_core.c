@@ -160,7 +160,7 @@ static int fts_ts_stop(struct device *dev);
 struct fts_ts_data *fts_ts = NULL;
 
 #ifdef CONFIG_WAKE_GESTURES
-bool scr_suspended_ft(void) {
+bool scr_suspended(void) {
 	return fts_ts->suspended;
 }
 #endif
@@ -431,7 +431,7 @@ static void fts_report_value(struct fts_ts_data *data)
 
 	#ifdef CONFIG_WAKE_GESTURES
 		if (data->suspended)
-			x += 5000;
+			event->au16_x[i] += 5000;
 	#endif
 
 	for (i = 0; i < event->touch_point; i++) {
@@ -967,12 +967,12 @@ int fts_ts_suspend(struct device *dev)
 	#ifdef CONFIG_WAKE_GESTURES
 	if (device_may_wakeup(dev) && (s2w_switch || dt2w_switch)) {
 		fts_write_reg(data->client, 0xD0, 1);
-		err = enable_irq_wake(data->client->irq);
-		if (err)
+		error = enable_irq_wake(data->client->irq);
+		if (error)
 			dev_err(&data->client->dev,
 				"%s: set_irq_wake failed\n", __func__);
 		data->suspended = true;
-		return err;
+		return error;
 	}
 	#endif
 

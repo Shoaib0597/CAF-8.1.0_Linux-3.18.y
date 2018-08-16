@@ -115,14 +115,11 @@ static struct workqueue_struct *s2w_input_wq;
 static struct workqueue_struct *dt2w_input_wq;
 static struct work_struct s2w_input_work;
 static struct work_struct dt2w_input_work;
-extern void set_vibrate(int value);
+//extern void set_vibrate(int value);
 
 static bool is_suspended(void)
 {
-	if (hw_version == IMAGIS)
 		return scr_suspended();
-	else
-		return scr_suspended_ft();
 }
 
 /* Wake Gestures */
@@ -153,7 +150,7 @@ static void wake_presspwr(struct work_struct * wake_presspwr_work) {
 	msleep(WG_PWRKEY_DUR);
 	mutex_unlock(&pwrkeyworklock);
 
-	set_vibrate(vib_strength);
+	//set_vibrate(vib_strength);
 
 	return;
 }
