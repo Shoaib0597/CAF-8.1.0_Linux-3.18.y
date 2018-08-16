@@ -49,6 +49,9 @@
 #define FTS_SUSPEND_LEVEL 1
 #endif
 
+#ifdef CONFIG_WAKE_GESTURES
+#include <linux/wake_gestures.h>
+#endif
 
 /*******************************************************************************
 * Private constant and macro definitions using #define
@@ -154,6 +157,13 @@ u8 buf_touch_data[30*POINT_READ_BUF] = { 0 };
 static int fts_ts_start(struct device *dev);
 static int fts_ts_stop(struct device *dev);
 
+struct fts_ts_data *fts_ts = NULL;
+
+#ifdef CONFIG_WAKE_GESTURES
+bool scr_suspended_ft(void) {
+	return ft5x06_ts->suspended;
+}
+#endif
 
 /*******************************************************************************
 *  Name: fts_i2c_read
@@ -418,6 +428,11 @@ static void fts_report_value(struct fts_ts_data *data)
 		if((event->au8_touch_event[i]==0 || event->au8_touch_event[i]==2)&&(event->point_num==0))
 			return;
 	}
+
+	#ifdef CONFIG_WAKE_GESTURES
+		if (data->suspended)
+			x += 5000;
+	#endif
 
 	for (i = 0; i < event->touch_point; i++) {
 		input_mt_slot(data->input_dev, event->au8_finger_id[i]);
@@ -949,6 +964,17 @@ int fts_ts_suspend(struct device *dev)
 		return 0;
 	}
 
+	#ifdef CONFIG_WAKE_GESTURES
+	if (device_may_wakeup(dev) && (s2w_switch || dt2w_switch)) {
+		ft5x0x_write_reg(data->client, 0xD0, 1);
+		err = enable_irq_wake(data->client->irq);
+		if (err)
+			dev_err(&data->client->dev,
+				"%s: set_irq_wake failed\n", __func__);
+		data->suspended = true;
+		return err;
+	}
+	#endif
 
 	return fts_ts_stop(dev);
 }
@@ -965,10 +991,41 @@ int fts_ts_resume(struct device *dev)
 	int err;
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 
+	#ifdef CONFIG_WAKE_GESTURES
+	int i;
+	#endif
+
 	if (!data->suspended) {
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
 	}
+
+	#ifdef CONFIG_WAKE_GESTURES
+	if (device_may_wakeup(dev) && (s2w_switch || dt2w_switch)) {
+		ft5x0x_write_reg(data->client, 0xD0, 0);
+		for (i = 0; i < data->pdata->num_max_touches; i++) {
+			input_mt_slot(data->input_dev, i);
+			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, 0);
+		}
+		input_mt_report_pointer_emulation(data->input_dev, false);
+		input_sync(data->input_dev);
+		err = disable_irq_wake(data->client->irq);
+		if (err)
+			dev_err(dev, "%s: disable_irq_wake failed\n",
+				__func__);
+		data->suspended = false;
+		if (dt2w_switch_changed) {
+			dt2w_switch = dt2w_switch_temp;
+			dt2w_switch_changed = false;
+		}
+		if (s2w_switch_changed) {
+			s2w_switch = s2w_switch_temp;
+			s2w_switch_changed = false;
+		}
+		return err;
+	}
+	#endif
+
 #ifdef CONFIG_FT5XX_TGESTURE_FUNCTION
 #if FTS_GESTRUE_EN
 	if (bEnTGesture) {
@@ -1743,6 +1800,11 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		err = PTR_ERR(temp);
 		goto free_debug_dir;
 	}
+
+	#ifdef CONFIG_WAKE_GESTURES
+	ft5x06_ts = data;
+	device_init_wakeup(&client->dev, 1);
+	#endif
 
 	data->ts_info = devm_kzalloc(&client->dev, FTS_INFO_MAX_LEN, GFP_KERNEL);
 	if (!data->ts_info) {
